@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Daily financial record book for tracking services, cash, transfers, and expenses.">
+  <title>Daily Financial Record</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Glancyr', 'system-ui', '-apple-system', 'sans-serif'],
+            heading: ['Glancyr', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          boxShadow: {
+            'soft': '0 1px 2px 0 rgb(0 0 0 / 0.04)',
+            'card': '0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @font-face {
+      font-family: 'Glancyr';
+      src: url('Glancyr-Light.otf') format('opentype');
+      font-weight: 300;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Glancyr';
+      src: url('Glancyr-Medium.otf') format('opentype');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    * { -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: 'Glancyr', system-ui, -apple-system, sans-serif;
+      font-weight: 300;
+      background: #f8fafc;
+      color: #0f172a;
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-heading {
+      font-family: 'Glancyr', system-ui, -apple-system, sans-serif;
+      font-weight: 500;
+    }
+
+    .amount { font-variant-numeric: tabular-nums; }
+
+    input:focus, select:focus, button:focus-visible { outline: none; }
+    input:focus, select:focus {
+      border-color: #64748b !important;
+      box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12);
+    }
+
+    .btn-press:active { transform: scale(0.985); }
+
+    .toast {
+      transform: translateX(-50%) translateY(16px);
+      opacity: 0;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .modal-backdrop {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .modal-backdrop.open {
+      opacity: 1;
+      visibility: visible;
+    }
+    .modal-panel {
+      transform: scale(0.96) translateY(8px);
+      opacity: 0;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .modal-backdrop.open .modal-panel {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    .table-wrap { width: 100%; overflow-x: hidden; }
+    table { width: 100%; table-layout: fixed; }
+    td, th { word-wrap: break-word; overflow-wrap: break-word; }
+
+    @media print {
+      @page { size: A4 portrait; margin: 16mm 14mm; }
+      html, body {
+        background: white !important;
+        color: #000 !important;
+        font-size: 11pt;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body * { visibility: hidden; }
+      #printReceipt, #printReceipt * { visibility: visible; }
+      #printReceipt {
+        position: absolute;
+        left: 0; top: 0; width: 100%;
+        margin: 0; padding: 0; background: white;
+      }
+      .no-print { display: none !important; }
+    }
+
+    .receipt-sheet {
+      font-family: 'Glancyr', system-ui, sans-serif;
+      font-weight: 300;
+      color: #0f172a;
+      max-width: 400px;
+      margin: 0 auto;
+      background: white;
+    }
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 0;
+      font-size: 13px;
+    }
+    .receipt-row .label { color: #64748b; }
+    .receipt-row .value { font-weight: 500; font-variant-numeric: tabular-nums; }
+    .receipt-row.emphasis .label { color: #0f172a; font-weight: 500; }
+    .receipt-row.emphasis .value { font-size: 15px; font-weight: 500; }
+    .receipt-row.highlight {
+      background: #f1f5f9;
+      margin: 2px -10px;
+      padding: 11px 10px;
+      border-radius: 6px;
+    }
+    .receipt-row.highlight .label { color: #0f172a; font-weight: 500; }
+    .receipt-row.highlight .value { font-size: 16px; font-weight: 500; }
+    .receipt-divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 12px 0;
+    }
+  </style>
+</head>
+<body class="antialiased">
+
+  <div class="min-h-screen no-print">
+
+    <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
+      <div class="max-w-3xl mx-auto px-4 sm:px-5">
+        <div class="flex items-center justify-between h-14">
+          <div>
+            <h1 class="text-sm font-heading text-slate-900 leading-none">Daily Record</h1>
+            <p class="text-[10px] text-slate-500 mt-0.5 hidden sm:block">Financial records</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="downloadPdfButton" type="button"
+              class="btn-press inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition-colors">
+              <i class="bi bi-file-earmark-pdf"></i>
+              <span>PDF</span>
+            </button>
+            <button id="printButton" type="button"
+              class="btn-press inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors">
+              <i class="bi bi-printer"></i>
+              <span>Print</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-4 sm:px-5 py-5 sm:py-7 space-y-4">
+
+      <!-- Date -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-soft p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p class="text-[10px] font-heading uppercase tracking-wider text-slate-400 mb-0.5">Recording Date</p>
+            <p id="displayDate" class="text-base sm:text-lg font-heading text-slate-900">Loading...</p>
+          </div>
+          <div class="relative">
+            <label for="recordDate" class="sr-only">Select date</label>
+            <i class="bi bi-calendar3 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"></i>
+            <input type="date" id="recordDate"
+              class="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 w-full sm:w-40">
+          </div>
+        </div>
+      </section>
+
+      <!-- Summary -->
+      <section class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-soft p-3.5">
+          <p class="text-[10px] font-heading uppercase tracking-wide text-slate-400 mb-1.5">Cash Received</p>
+          <p id="summaryCash" class="amount text-lg font-heading text-slate-900">₦0</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-soft p-3.5">
+          <p class="text-[10px] font-heading uppercase tracking-wide text-slate-400 mb-1.5">Transfer Received</p>
+          <p id="summaryTransfer" class="amount text-lg font-heading text-slate-900">₦0</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-soft p-3.5 col-span-2 sm:col-span-1">
+          <p class="text-[10px] font-heading uppercase tracking-wide text-slate-400 mb-1.5">Combined Revenue</p>
+          <p id="summaryRevenue" class="amount text-lg font-heading text-slate-900">₦0</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-soft p-3.5">
+          <p class="text-[10px] font-heading uppercase tracking-wide text-slate-400 mb-1.5">Total Expenses</p>
+          <p id="summaryExpenses" class="amount text-lg font-heading text-rose-600">-₦0</p>
+        </div>
+        <div class="bg-white rounded-xl border border-emerald-200 shadow-soft p-3.5">
+          <p class="text-[10px] font-heading uppercase tracking-wide text-emerald-600 mb-1.5">Cash Remaining</p>
+          <p id="summaryRemaining" class="amount text-lg font-heading text-emerald-700">₦0</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-soft p-3.5">
+          <p class="text-[10px] font-heading uppercase tracking-wide text-slate-400 mb-1.5">Transfer Recorded</p>
+          <p id="summaryTransferFinal" class="amount text-lg font-heading text-slate-900">₦0</p>
+        </div>
+      </section>
+
+      <!-- Service Records -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
+        <div class="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-heading text-slate-900">Service Records</h2>
+            <p class="text-[11px] text-slate-500 mt-0.5">One row per service</p>
+          </div>
+          <span id="transactionCount" class="text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-0.5">0 records</span>
+        </div>
+
+        <div class="px-4 py-3.5 bg-slate-50/80 border-b border-slate-100">
+          <form id="transactionForm" class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+            <div class="sm:col-span-5">
+              <label for="serviceInput" class="block text-[11px] font-medium text-slate-500 mb-1">Service</label>
+              <input type="text" id="serviceInput" placeholder="What was done" autocomplete="off" required
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400">
+            </div>
+            <div class="sm:col-span-2">
+              <label for="cashInput" class="block text-[11px] font-medium text-slate-500 mb-1">Cash (₦)</label>
+              <input type="number" id="cashInput" placeholder="0" min="0" step="0.01"
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400">
+            </div>
+            <div class="sm:col-span-2">
+              <label for="transferInput" class="block text-[11px] font-medium text-slate-500 mb-1">Transfer (₦)</label>
+              <input type="number" id="transferInput" placeholder="0" min="0" step="0.01"
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400">
+            </div>
+            <div class="sm:col-span-3">
+              <button type="submit"
+                class="btn-press w-full h-10 bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                <i class="bi bi-plus-lg text-xs"></i>
+                Save
+              </button>
+            </div>
+          </form>
+          <p class="text-[11px] text-slate-400 mt-2">Enter amount under Cash or Transfer only.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-slate-100">
+                <th class="px-3 sm:px-4 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:50%">Service</th>
+                <th class="px-2 sm:px-4 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:20%">Cash</th>
+                <th class="px-2 sm:px-4 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:20%">Trans</th>
+                <th class="px-2 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:10%"></th>
+              </tr>
+            </thead>
+            <tbody id="transactionTable">
+              <tr>
+                <td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">No service records yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="px-4 py-3 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between">
+          <span class="text-xs text-slate-500">Total received</span>
+          <span id="totalIncome" class="amount text-sm font-heading text-slate-900">₦0</span>
+        </div>
+      </section>
+
+      <!-- Expenses -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
+        <div class="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-heading text-slate-900">Daily Expenses</h2>
+            <p class="text-[11px] text-slate-500 mt-0.5">Deducted from cash only</p>
+          </div>
+          <span id="expenseCount" class="text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-0.5">0 expenses</span>
+        </div>
+
+        <div class="mx-4 mt-3.5 p-3.5 rounded-lg bg-amber-50 border border-amber-100">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 mb-2.5">
+            <div>
+              <p class="text-xs font-heading text-amber-900">Daily Allowance Suggestions</p>
+              <p class="text-[11px] text-amber-700/80 mt-0.5">Add only if confirmed</p>
+            </div>
+            <button type="button" id="addAllowancesButton"
+              class="btn-press shrink-0 inline-flex items-center gap-1.5 bg-white hover:bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+              <i class="bi bi-plus-circle"></i>
+              Add allowances
+            </button>
+          </div>
+          <div id="allowancePreview" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <div class="px-4 py-3.5 border-b border-slate-100">
+          <form id="expenseForm" class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+            <div class="sm:col-span-4">
+              <label for="expenseInput" class="block text-[11px] font-medium text-slate-500 mb-1">Expense</label>
+              <input type="text" id="expenseInput" placeholder="e.g. Transport" required
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400">
+            </div>
+            <div class="sm:col-span-3">
+              <label for="personInput" class="block text-[11px] font-medium text-slate-500 mb-1">Person</label>
+              <input type="text" id="personInput" placeholder="e.g. Elijah" required
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400">
+            </div>
+            <div class="sm:col-span-2">
+              <label for="expenseAmount" class="block text-[11px] font-medium text-slate-500 mb-1">Amount (₦)</label>
+              <input type="number" id="expenseAmount" placeholder="0" min="0" step="0.01" required
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400">
+            </div>
+            <div class="sm:col-span-3">
+              <button type="submit"
+                class="btn-press w-full h-10 bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                <i class="bi bi-plus-lg text-xs"></i>
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="table-wrap">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-slate-100">
+                <th class="px-3 sm:px-4 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:40%">Expense</th>
+                <th class="px-2 sm:px-4 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:25%">Person</th>
+                <th class="px-2 sm:px-4 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:25%">Amount</th>
+                <th class="px-2 py-2.5 text-[10px] font-heading text-slate-400 uppercase tracking-wider" style="width:10%"></th>
+              </tr>
+            </thead>
+            <tbody id="expenseTable">
+              <tr>
+                <td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">No expenses yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="px-4 py-3 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between">
+          <span class="text-xs text-slate-500">Total expenses</span>
+          <span id="totalExpenses" class="amount text-sm font-heading text-rose-600">-₦0</span>
+        </div>
+      </section>
+
+      <!-- Cash Balance -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-soft p-4">
+        <h2 class="text-sm font-heading text-slate-900 mb-3">Cash Balance</h2>
+        <div class="space-y-0">
+          <div class="flex items-center justify-between py-2">
+            <span class="text-sm text-slate-500">Total cash received</span>
+            <span id="calculationCash" class="amount text-sm font-medium text-slate-800">₦0</span>
+          </div>
+          <div class="flex items-center justify-between py-2 border-t border-slate-100">
+            <span class="text-sm text-slate-500">Less: Daily expenses</span>
+            <span id="calculationExpenses" class="amount text-sm font-medium text-rose-600">-₦0</span>
+          </div>
+          <div class="flex items-center justify-between py-2.5 px-3 mt-1 bg-emerald-50 rounded-lg border border-emerald-100">
+            <span class="text-sm font-heading text-emerald-800">Final cash balance</span>
+            <span id="calculationRemaining" class="amount text-sm font-heading text-emerald-700">₦0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Weekly Summary -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-soft p-4">
+        <h2 class="text-sm font-heading text-slate-900 mb-1">This Week Summary</h2>
+        <p class="text-[11px] text-slate-500 mb-3" id="weekRangeLabel">—</p>
+        <div class="space-y-0 text-sm">
+          <div class="flex items-center justify-between py-2">
+            <span class="text-slate-500">Total Cash Received</span>
+            <span id="weekCash" class="amount font-medium text-slate-800">₦0</span>
+          </div>
+          <div class="flex items-center justify-between py-2 border-t border-slate-100">
+            <span class="text-slate-500">Total Transfer Received</span>
+            <span id="weekTransfer" class="amount font-medium text-slate-800">₦0</span>
+          </div>
+          <div class="flex items-center justify-between py-2 border-t border-slate-100">
+            <span class="text-slate-500">Combined Revenue</span>
+            <span id="weekRevenue" class="amount font-medium text-slate-800">₦0</span>
+          </div>
+          <div class="flex items-center justify-between py-2 border-t border-slate-100">
+            <span class="text-slate-500">Total Expenses</span>
+            <span id="weekExpenses" class="amount font-medium text-rose-600">-₦0</span>
+          </div>
+          <div class="flex items-center justify-between py-2.5 px-3 mt-1 bg-slate-50 rounded-lg border border-slate-100">
+            <span class="font-heading text-slate-800">Cash Remaining (week)</span>
+            <span id="weekRemaining" class="amount font-heading text-slate-900">₦0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Day-to-day History -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
+        <div class="px-4 py-3.5 border-b border-slate-100">
+          <h2 class="text-sm font-heading text-slate-900">Recent Days</h2>
+          <p class="text-[11px] text-slate-500 mt-0.5">Tap a day to view its records</p>
+        </div>
+        <div id="historyList" class="divide-y divide-slate-100">
+          <div class="px-4 py-6 text-center text-sm text-slate-400">No previous records yet</div>
+        </div>
+      </section>
+
+      <!-- Actions -->
+      <section class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-1 pb-6">
+        <div class="flex flex-wrap gap-2">
+          <button id="exportButton" type="button"
+            class="btn-press inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition-colors">
+            <i class="bi bi-download"></i>
+            Export Backup
+          </button>
+          <button id="importButton" type="button"
+            class="btn-press inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition-colors">
+            <i class="bi bi-upload"></i>
+            Restore Backup
+          </button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+        <button id="clearButton" type="button"
+          class="btn-press inline-flex items-center gap-1.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium px-3 py-2 rounded-lg transition-colors">
+          <i class="bi bi-trash3"></i>
+          Clear this day
+        </button>
+      </section>
+
+      <p class="text-center text-[11px] text-slate-400 pb-4">
+        Records are stored on this device only
+      </p>
+    </main>
+  </div>
+
+  <!-- Print / PDF Receipt -->
+  <div id="printReceipt" class="hidden">
+    <div class="receipt-sheet" style="padding: 8px 4px;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:10px;font-weight:500;letter-spacing:0.12em;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Daily Financial Record</div>
+        <div style="font-size:18px;font-weight:500;color:#0f172a;letter-spacing:-0.02em;margin-bottom:4px;">End of Day Statement</div>
+        <div id="printDate" style="font-size:12px;color:#475569;font-weight:300;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:18px;">
+        <div>
+          <div style="font-size:9px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;">Reference</div>
+          <div id="printRef" style="font-size:12px;font-weight:500;color:#0f172a;font-variant-numeric:tabular-nums;margin-top:2px;"></div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:9px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;">Status</div>
+          <div style="font-size:12px;font-weight:500;color:#059669;margin-top:2px;">Completed</div>
+        </div>
+      </div>
+      <div style="margin-bottom:6px;">
+        <div style="font-size:9px;font-weight:500;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Summary</div>
+        <div class="receipt-row"><span class="label">Total Cash Received</span><span class="value" id="printCash">₦0</span></div>
+        <div class="receipt-row"><span class="label">Total Transfer Received</span><span class="value" id="printTransfer">₦0</span></div>
+        <hr class="receipt-divider">
+        <div class="receipt-row highlight"><span class="label">Combined Revenue</span><span class="value" id="printRevenue">₦0</span></div>
+        <hr class="receipt-divider">
+        <div class="receipt-row"><span class="label">Total Expenses</span><span class="value" id="printExpenses" style="color:#be123c;">-₦0</span></div>
+        <div class="receipt-row highlight" style="background:#ecfdf5;"><span class="label" style="color:#047857;">Cash Remaining</span><span class="value" id="printRemaining" style="color:#047857;">₦0</span></div>
+        <div class="receipt-row emphasis" style="margin-top:8px;"><span class="label">Transfer Recorded</span><span class="value" id="printTransferFinal">₦0</span></div>
+      </div>
+      <div style="margin-top:28px;padding-top:14px;border-top:1px solid #e2e8f0;text-align:center;">
+        <p style="font-size:11px;color:#64748b;line-height:1.5;margin:0;font-weight:300;">This daily financial record has been completed and verified.</p>
+        <p style="font-size:10px;color:#94a3b8;margin:8px 0 0;font-weight:300;">Generated on <span id="printGenerated"></span></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast fixed bottom-5 left-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-lg pointer-events-none max-w-[90vw] truncate"></div>
+
+  <div id="confirmModal" class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40">
+    <div class="modal-panel bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
+      <div class="p-5">
+        <div id="modalIconWrap" class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center mb-3.5">
+          <i class="bi bi-question-circle text-lg" id="modalIcon"></i>
+        </div>
+        <h3 id="modalTitle" class="text-sm font-heading text-slate-900 mb-1">Confirm</h3>
+        <p id="modalMessage" class="text-sm text-slate-500 leading-relaxed"></p>
+      </div>
+      <div class="px-5 pb-5 flex gap-2">
+        <button id="modalCancel" type="button" class="btn-press flex-1 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors">Cancel</button>
+        <button id="modalConfirm" type="button" class="btn-press flex-1 h-10 bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium rounded-lg transition-colors">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "dailyRecordBook_v1";
+
+    const elements = {
+      date: document.getElementById("recordDate"),
+      displayDate: document.getElementById("displayDate"),
+      transactionForm: document.getElementById("transactionForm"),
+      service: document.getElementById("serviceInput"),
+      cash: document.getElementById("cashInput"),
+      transfer: document.getElementById("transferInput"),
+      transactionTable: document.getElementById("transactionTable"),
+      transactionCount: document.getElementById("transactionCount"),
+      totalIncome: document.getElementById("totalIncome"),
+      expenseForm: document.getElementById("expenseForm"),
+      expense: document.getElementById("expenseInput"),
+      person: document.getElementById("personInput"),
+      expenseAmount: document.getElementById("expenseAmount"),
+      expenseTable: document.getElementById("expenseTable"),
+      expenseCount: document.getElementById("expenseCount"),
+      totalExpenses: document.getElementById("totalExpenses"),
+      allowancePreview: document.getElementById("allowancePreview"),
+      addAllowancesButton: document.getElementById("addAllowancesButton"),
+      summaryCash: document.getElementById("summaryCash"),
+      summaryTransfer: document.getElementById("summaryTransfer"),
+      summaryRevenue: document.getElementById("summaryRevenue"),
+      summaryExpenses: document.getElementById("summaryExpenses"),
+      summaryRemaining: document.getElementById("summaryRemaining"),
+      summaryTransferFinal: document.getElementById("summaryTransferFinal"),
+      calculationCash: document.getElementById("calculationCash"),
+      calculationExpenses: document.getElementById("calculationExpenses"),
+      calculationRemaining: document.getElementById("calculationRemaining"),
+      printButton: document.getElementById("printButton"),
+      downloadPdfButton: document.getElementById("downloadPdfButton"),
+      exportButton: document.getElementById("exportButton"),
+      importButton: document.getElementById("importButton"),
+      importFile: document.getElementById("importFile"),
+      clearButton: document.getElementById("clearButton"),
+      toast: document.getElementById("toast"),
+      printDate: document.getElementById("printDate"),
+      printRef: document.getElementById("printRef"),
+      printCash: document.getElementById("printCash"),
+      printTransfer: document.getElementById("printTransfer"),
+      printRevenue: document.getElementById("printRevenue"),
+      printExpenses: document.getElementById("printExpenses"),
+      printRemaining: document.getElementById("printRemaining"),
+      printTransferFinal: document.getElementById("printTransferFinal"),
+      printGenerated: document.getElementById("printGenerated"),
+      confirmModal: document.getElementById("confirmModal"),
+      modalTitle: document.getElementById("modalTitle"),
+      modalMessage: document.getElementById("modalMessage"),
+      modalIcon: document.getElementById("modalIcon"),
+      modalIconWrap: document.getElementById("modalIconWrap"),
+      modalCancel: document.getElementById("modalCancel"),
+      modalConfirm: document.getElementById("modalConfirm"),
+      weekRangeLabel: document.getElementById("weekRangeLabel"),
+      weekCash: document.getElementById("weekCash"),
+      weekTransfer: document.getElementById("weekTransfer"),
+      weekRevenue: document.getElementById("weekRevenue"),
+      weekExpenses: document.getElementById("weekExpenses"),
+      weekRemaining: document.getElementById("weekRemaining"),
+      historyList: document.getElementById("historyList")
+    };
+
+    let database = loadDatabase();
+    let confirmCallback = null;
+
+    function getLocalDate() {
+      const now = new Date();
+      return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    }
+
+    function loadDatabase() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        return saved ? JSON.parse(saved) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveDatabase() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+      } catch (e) {
+        showToast("Unable to save records.");
+      }
+    }
+
+    function getCurrentRecord() {
+      const date = elements.date.value;
+      if (!database[date]) {
+        database[date] = { transactions: [], expenses: [], allowancesAdded: false };
+      }
+      return database[date];
+    }
+
+    function formatMoney(amount) {
+      return "₦" + Number(amount || 0).toLocaleString("en-NG", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return "";
+      return new Date(dateString + "T12:00:00").toLocaleDateString("en-NG", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric"
+      });
+    }
+
+    function formatShortDate(dateString) {
+      if (!dateString) return "";
+      return new Date(dateString + "T12:00:00").toLocaleDateString("en-NG", {
+        weekday: "short", day: "numeric", month: "short"
+      });
+    }
+
+    function showToast(message) {
+      elements.toast.textContent = message;
+      elements.toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(function () {
+        elements.toast.classList.remove("show");
+      }, 2400);
+    }
+
+    function escapeHTML(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function getTotals(record) {
+      const cash = (record.transactions || []).reduce(function (s, i) { return s + Number(i.cash || 0); }, 0);
+      const transfer = (record.transactions || []).reduce(function (s, i) { return s + Number(i.transfer || 0); }, 0);
+      const expenses = (record.expenses || []).reduce(function (s, i) { return s + Number(i.amount || 0); }, 0);
+      return {
+        cash: cash,
+        transfer: transfer,
+        expenses: expenses,
+        revenue: cash + transfer,
+        remaining: cash - expenses
+      };
+    }
+
+    function generateReference(dateString) {
+      const cleaned = dateString.replace(/-/g, "");
+      const checksum = cleaned.split("").reduce(function (a, c) { return a + Number(c); }, 0);
+      return "DFR-" + cleaned + "-" + String(checksum).padStart(3, "0");
+    }
+
+    function showConfirm(options) {
+      elements.modalTitle.textContent = options.title;
+      elements.modalMessage.textContent = options.message;
+      elements.modalConfirm.textContent = options.confirmText || "Confirm";
+      elements.modalCancel.textContent = options.cancelText || "Cancel";
+
+      if (options.danger) {
+        elements.modalConfirm.className = "btn-press flex-1 h-10 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-lg transition-colors";
+        elements.modalIcon.className = "bi bi-exclamation-triangle text-lg";
+        elements.modalIconWrap.className = "w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-3.5";
+      } else {
+        elements.modalConfirm.className = "btn-press flex-1 h-10 bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium rounded-lg transition-colors";
+        elements.modalIcon.className = "bi bi-question-circle text-lg";
+        elements.modalIconWrap.className = "w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center mb-3.5";
+      }
+
+      confirmCallback = options.onConfirm;
+      elements.confirmModal.classList.add("open");
+    }
+
+    function closeModal() {
+      elements.confirmModal.classList.remove("open");
+      confirmCallback = null;
+    }
+
+    elements.modalCancel.addEventListener("click", closeModal);
+
+    // FIXED: save callback, close modal first, then run callback after a short delay
+    elements.modalConfirm.addEventListener("click", function () {
+      const cb = confirmCallback;
+      closeModal();
+      if (typeof cb === "function") {
+        setTimeout(function () {
+          cb();
+        }, 80);
+      }
+    });
+
+    elements.confirmModal.addEventListener("click", function (e) {
+      if (e.target === elements.confirmModal) closeModal();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && elements.confirmModal.classList.contains("open")) closeModal();
+    });
+
+    function updateDateDisplay() {
+      elements.displayDate.textContent = formatDate(elements.date.value);
+    }
+
+    function renderTransactions(record) {
+      const list = record.transactions || [];
+      elements.transactionCount.textContent = list.length + (list.length === 1 ? " record" : " records");
+
+      if (!list.length) {
+        elements.transactionTable.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">No service records yet</td></tr>';
+        return;
+      }
+
+      let html = "";
+      for (let index = 0; index < list.length; index++) {
+        const item = list[index];
+        const serviceName = escapeHTML(item.service);
+        const cashDisplay = item.cash > 0 ? formatMoney(item.cash) : '<span class="text-slate-300">—</span>';
+        const transferDisplay = item.transfer > 0 ? formatMoney(item.transfer) : '<span class="text-slate-300">—</span>';
+
+        html += '<tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">';
+        html += '<td class="px-3 sm:px-4 py-3 text-sm text-slate-800 font-medium"><span class="block truncate" title="' + serviceName + '">' + serviceName + '</span></td>';
+        html += '<td class="px-2 sm:px-4 py-3 text-sm amount text-slate-700">' + cashDisplay + '</td>';
+        html += '<td class="px-2 sm:px-4 py-3 text-sm amount text-slate-700">' + transferDisplay + '</td>';
+        html += '<td class="px-2 py-3 text-right"><button class="w-7 h-7 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center" data-delete-transaction="' + index + '" type="button" aria-label="Delete"><i class="bi bi-trash3 text-xs"></i></button></td>';
+        html += '</tr>';
+      }
+      elements.transactionTable.innerHTML = html;
+    }
+
+    function renderExpenses(record) {
+      const list = record.expenses || [];
+      elements.expenseCount.textContent = list.length + (list.length === 1 ? " expense" : " expenses");
+
+      if (!list.length) {
+        elements.expenseTable.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">No expenses yet</td></tr>';
+        return;
+      }
+
+      let html = "";
+      for (let index = 0; index < list.length; index++) {
+        const item = list[index];
+        const expenseName = escapeHTML(item.expense);
+        const personName = escapeHTML(item.person);
+        const amountDisplay = formatMoney(item.amount);
+        const badge = item.type === "allowance" ? '<span class="ml-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-0.5">Allowance</span>' : "";
+
+        html += '<tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">';
+        html += '<td class="px-3 sm:px-4 py-3 text-sm text-slate-800 font-medium"><span class="block truncate" title="' + expenseName + '">' + expenseName + badge + '</span></td>';
+        html += '<td class="px-2 sm:px-4 py-3 text-sm text-slate-600 truncate">' + personName + '</td>';
+        html += '<td class="px-2 sm:px-4 py-3 text-sm amount font-medium text-slate-800">' + amountDisplay + '</td>';
+        html += '<td class="px-2 py-3 text-right"><button class="w-7 h-7 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center" data-delete-expense="' + index + '" type="button" aria-label="Delete"><i class="bi bi-trash3 text-xs"></i></button></td>';
+        html += '</tr>';
+      }
+      elements.expenseTable.innerHTML = html;
+    }
+
+    function renderSummary(record) {
+      const t = getTotals(record);
+      elements.totalIncome.textContent = formatMoney(t.revenue);
+      elements.totalExpenses.textContent = "-" + formatMoney(t.expenses);
+      elements.summaryCash.textContent = formatMoney(t.cash);
+      elements.summaryTransfer.textContent = formatMoney(t.transfer);
+      elements.summaryRevenue.textContent = formatMoney(t.revenue);
+      elements.summaryExpenses.textContent = "-" + formatMoney(t.expenses);
+      elements.summaryRemaining.textContent = formatMoney(t.remaining);
+      elements.summaryTransferFinal.textContent = formatMoney(t.transfer);
+      elements.calculationCash.textContent = formatMoney(t.cash);
+      elements.calculationExpenses.textContent = "-" + formatMoney(t.expenses);
+      elements.calculationRemaining.textContent = formatMoney(t.remaining);
+
+      const neg = t.remaining < 0;
+      elements.summaryRemaining.classList.toggle("text-rose-600", neg);
+      elements.summaryRemaining.classList.toggle("text-emerald-700", !neg);
+      elements.calculationRemaining.classList.toggle("text-rose-600", neg);
+      elements.calculationRemaining.classList.toggle("text-emerald-700", !neg);
+
+      updatePrintReceipt(t);
+    }
+
+    function updatePrintReceipt(t) {
+      const dateStr = elements.date.value;
+      elements.printDate.textContent = formatDate(dateStr);
+      elements.printRef.textContent = generateReference(dateStr);
+      elements.printCash.textContent = formatMoney(t.cash);
+      elements.printTransfer.textContent = formatMoney(t.transfer);
+      elements.printRevenue.textContent = formatMoney(t.revenue);
+      elements.printExpenses.textContent = "-" + formatMoney(t.expenses);
+      elements.printRemaining.textContent = formatMoney(t.remaining);
+      elements.printTransferFinal.textContent = formatMoney(t.transfer);
+      elements.printGenerated.textContent = new Date().toLocaleString("en-NG", {
+        day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+      });
+    }
+
+    function getAllowances(dateString) {
+      const day = new Date(dateString + "T12:00:00").getDay();
+      const list = [
+        { expense: "Transport", person: "Elijah", amount: 500 },
+        { expense: "Transport", person: "Nicholas", amount: 500 },
+        { expense: "Transport", person: "Gabriel", amount: 1000 }
+      ];
+      if ([1, 3, 5].includes(day)) {
+        list.push(
+          { expense: "Food", person: "Elijah", amount: 500 },
+          { expense: "Food", person: "Nicholas", amount: 500 },
+          { expense: "Food", person: "Gabriel", amount: 500 }
+        );
+      }
+      return list;
+    }
+
+    function renderAllowances(record) {
+      const list = getAllowances(elements.date.value);
+      let html = "";
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        html += '<span class="inline-flex items-center gap-1 bg-white border border-amber-200 rounded px-2 py-1 text-[11px] text-amber-900">';
+        html += escapeHTML(item.expense) + " · " + escapeHTML(item.person) + " <strong>" + formatMoney(item.amount) + "</strong></span>";
+      }
+      elements.allowancePreview.innerHTML = html;
+      elements.addAllowancesButton.disabled = record.allowancesAdded;
+      elements.addAllowancesButton.innerHTML = record.allowancesAdded
+        ? '<i class="bi bi-check-circle"></i> Already added'
+        : '<i class="bi bi-plus-circle"></i> Add allowances';
+      elements.addAllowancesButton.classList.toggle("opacity-50", record.allowancesAdded);
+      elements.addAllowancesButton.classList.toggle("cursor-not-allowed", record.allowancesAdded);
+    }
+
+    function renderWeeklySummary() {
+      const selected = elements.date.value;
+      if (!selected) return;
+
+      const d = new Date(selected + "T12:00:00");
+      const day = d.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + diffToMonday);
+
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+
+      const toKey = function (dateObj) {
+        return dateObj.getFullYear() + "-" + String(dateObj.getMonth() + 1).padStart(2, "0") + "-" + String(dateObj.getDate()).padStart(2, "0");
+      };
+
+      let cash = 0, transfer = 0, expenses = 0;
+      for (let i = 0; i < 7; i++) {
+        const cur = new Date(monday);
+        cur.setDate(monday.getDate() + i);
+        const key = toKey(cur);
+        if (database[key]) {
+          const t = getTotals(database[key]);
+          cash += t.cash;
+          transfer += t.transfer;
+          expenses += t.expenses;
+        }
+      }
+
+      const monLabel = monday.toLocaleDateString("en-NG", { day: "numeric", month: "short" });
+      const sunLabel = sunday.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
+      elements.weekRangeLabel.textContent = monLabel + " – " + sunLabel;
+
+      elements.weekCash.textContent = formatMoney(cash);
+      elements.weekTransfer.textContent = formatMoney(transfer);
+      elements.weekRevenue.textContent = formatMoney(cash + transfer);
+      elements.weekExpenses.textContent = "-" + formatMoney(expenses);
+      elements.weekRemaining.textContent = formatMoney(cash - expenses);
+    }
+
+    function renderHistory() {
+      const keys = Object.keys(database).filter(function (k) {
+        const rec = database[k];
+        return rec && ((rec.transactions && rec.transactions.length) || (rec.expenses && rec.expenses.length));
+      }).sort().reverse();
+
+      if (!keys.length) {
+        elements.historyList.innerHTML = '<div class="px-4 py-6 text-center text-sm text-slate-400">No previous records yet</div>';
+        return;
+      }
+
+      let html = "";
+      const limit = Math.min(keys.length, 14);
+      for (let i = 0; i < limit; i++) {
+        const key = keys[i];
+        const t = getTotals(database[key]);
+        const isSelected = key === elements.date.value;
+
+        html += '<button type="button" data-history-date="' + key + '" class="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 ' + (isSelected ? 'bg-slate-50' : '') + '">';
+        html += '<div class="min-w-0">';
+        html += '<p class="text-sm font-medium text-slate-800 truncate">' + formatShortDate(key) + '</p>';
+        html += '<p class="text-[11px] text-slate-500 mt-0.5">Cash ' + formatMoney(t.cash) + ' · Transfer ' + formatMoney(t.transfer) + '</p>';
+        html += '</div>';
+        html += '<div class="text-right shrink-0">';
+        html += '<p class="text-sm font-heading amount ' + (t.remaining < 0 ? 'text-rose-600' : 'text-emerald-700') + '">' + formatMoney(t.remaining) + '</p>';
+        html += '<p class="text-[10px] text-slate-400">remaining</p>';
+        html += '</div>';
+        html += '</button>';
+      }
+      elements.historyList.innerHTML = html;
+    }
+
+    function renderAll() {
+      const record = getCurrentRecord();
+      updateDateDisplay();
+      renderTransactions(record);
+      renderExpenses(record);
+      renderSummary(record);
+      renderAllowances(record);
+      renderWeeklySummary();
+      renderHistory();
+    }
+
+    // Save transaction
+    elements.transactionForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const service = elements.service.value.trim();
+      const cashVal = elements.cash.value.trim();
+      const transferVal = elements.transfer.value.trim();
+      const cash = cashVal === "" ? 0 : Number(cashVal);
+      const transfer = transferVal === "" ? 0 : Number(transferVal);
+
+      if (!service) return showToast("Please enter a service.");
+      if ((cashVal !== "" && (!Number.isFinite(cash) || cash <= 0)) ||
+          (transferVal !== "" && (!Number.isFinite(transfer) || transfer <= 0))) {
+        return showToast("Enter a valid amount greater than zero.");
+      }
+      if ((cash > 0 && transfer > 0) || (cash === 0 && transfer === 0)) {
+        return showToast("Enter amount under Cash or Transfer, not both.");
+      }
+
+      getCurrentRecord().transactions.push({
+        id: Date.now(), service: service, cash: cash, transfer: transfer, createdAt: new Date().toISOString()
+      });
+      saveDatabase();
+      elements.transactionForm.reset();
+      elements.service.focus();
+      renderAll();
+      showToast("Service record saved.");
+    });
+
+    // Save expense
+    elements.expenseForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const expense = elements.expense.value.trim();
+      const person = elements.person.value.trim();
+      const amount = Number(elements.expenseAmount.value);
+
+      if (!expense || !person || !Number.isFinite(amount) || amount <= 0) {
+        return showToast("Please complete all expense fields.");
+      }
+
+      getCurrentRecord().expenses.push({
+        id: Date.now(), expense: expense, person: person, amount: amount, createdAt: new Date().toISOString()
+      });
+      saveDatabase();
+      elements.expenseForm.reset();
+      elements.expense.focus();
+      renderAll();
+      showToast("Expense saved.");
+    });
+
+    // Add allowances
+    elements.addAllowancesButton.addEventListener("click", function () {
+      const record = getCurrentRecord();
+      if (record.allowancesAdded) return showToast("Allowances already added.");
+      const list = getAllowances(elements.date.value);
+      showConfirm({
+        title: "Add daily allowances?",
+        message: "This will add " + list.length + " allowance records to expenses.",
+        confirmText: "Add",
+        cancelText: "Cancel",
+        onConfirm: function () {
+          for (let i = 0; i < list.length; i++) {
+            const item = list[i];
+            record.expenses.push({
+              id: Date.now() + Math.random(),
+              expense: item.expense, person: item.person, amount: item.amount,
+              type: "allowance", createdAt: new Date().toISOString()
+            });
+          }
+          record.allowancesAdded = true;
+          saveDatabase();
+          renderAll();
+          showToast("Allowances added.");
+        }
+      });
+    });
+
+    // Delete transaction — two-step confirmation
+    elements.transactionTable.addEventListener("click", function (e) {
+      const btn = e.target.closest("[data-delete-transaction]");
+      if (!btn) return;
+      const index = Number(btn.dataset.deleteTransaction);
+
+      showConfirm({
+        title: "Delete this service record?",
+        message: "Do you want to delete this service record?",
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        danger: true,
+        onConfirm: function () {
+          showConfirm({
+            title: "Are you sure?",
+            message: "This action cannot be undone. Are you sure you want to permanently delete this record?",
+            confirmText: "Yes, delete",
+            cancelText: "No",
+            danger: true,
+            onConfirm: function () {
+              getCurrentRecord().transactions.splice(index, 1);
+              saveDatabase();
+              renderAll();
+              showToast("Record deleted.");
+            }
+          });
+        }
+      });
+    });
+
+    // Delete expense — two-step confirmation
+    elements.expenseTable.addEventListener("click", function (e) {
+      const btn = e.target.closest("[data-delete-expense]");
+      if (!btn) return;
+      const index = Number(btn.dataset.deleteExpense);
+
+      showConfirm({
+        title: "Delete this expense?",
+        message: "Do you want to delete this expense?",
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        danger: true,
+        onConfirm: function () {
+          showConfirm({
+            title: "Are you sure?",
+            message: "This action cannot be undone. Are you sure you want to permanently delete this expense?",
+            confirmText: "Yes, delete",
+            cancelText: "No",
+            danger: true,
+            onConfirm: function () {
+              const record = getCurrentRecord();
+              const deleted = record.expenses[index];
+              record.expenses.splice(index, 1);
+              if (deleted && deleted.type === "allowance") {
+                if (!record.expenses.some(function (i) { return i.type === "allowance"; })) {
+                  record.allowancesAdded = false;
+                }
+              }
+              saveDatabase();
+              renderAll();
+              showToast("Expense deleted.");
+            }
+          });
+        }
+      });
+    });
+
+    // History click → switch date
+    elements.historyList.addEventListener("click", function (e) {
+      const btn = e.target.closest("[data-history-date]");
+      if (!btn) return;
+      elements.date.value = btn.dataset.historyDate;
+      renderAll();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    elements.date.addEventListener("change", function () {
+      if (elements.date.value) renderAll();
+    });
+
+    // Print
+    elements.printButton.addEventListener("click", function () {
+      updatePrintReceipt(getTotals(getCurrentRecord()));
+      const receipt = document.getElementById("printReceipt");
+      receipt.classList.remove("hidden");
+      window.print();
+      setTimeout(function () { receipt.classList.add("hidden"); }, 500);
+    });
+
+    // PDF
+    elements.downloadPdfButton.addEventListener("click", function () {
+      updatePrintReceipt(getTotals(getCurrentRecord()));
+      const element = document.getElementById("printReceipt");
+      const dateStr = elements.date.value || getLocalDate();
+      const filename = "Daily-Record-" + dateStr + ".pdf";
+
+      element.classList.remove("hidden");
+      element.style.position = "fixed";
+      element.style.left = "-9999px";
+      element.style.top = "0";
+      element.style.width = "420px";
+      element.style.background = "#ffffff";
+      element.style.padding = "28px 24px";
+
+      html2pdf().set({
+        margin: [14, 14, 14, 14],
+        filename: filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["avoid-all"] }
+      }).from(element).save().then(function () {
+        element.classList.add("hidden");
+        element.style.position = element.style.left = element.style.top = element.style.width = element.style.background = element.style.padding = "";
+        showToast("PDF downloaded.");
+      }).catch(function () {
+        element.classList.add("hidden");
+        element.style.position = element.style.left = element.style.top = element.style.width = element.style.background = element.style.padding = "";
+        showToast("Could not generate PDF.");
+      });
+    });
+
+    elements.exportButton.addEventListener("click", function () {
+      const backup = { application: "Daily Record Book", version: 1, exportedAt: new Date().toISOString(), records: database };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "daily-record-book-backup-" + getLocalDate() + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Backup downloaded.");
+    });
+
+    elements.importButton.addEventListener("click", function () { elements.importFile.click(); });
+
+    elements.importFile.addEventListener("change", async function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const backup = JSON.parse(await file.text());
+        const records = backup.records || backup;
+        if (!records || typeof records !== "object" || Array.isArray(records)) throw new Error("Invalid");
+        showConfirm({
+          title: "Restore backup?",
+          message: "Matching dates will be overwritten. This cannot be undone.",
+          confirmText: "Restore", cancelText: "Cancel", danger: true,
+          onConfirm: function () {
+            database = Object.assign({}, database, records);
+            saveDatabase();
+            renderAll();
+            showToast("Backup restored.");
+          }
+        });
+      } catch (err) {
+        showToast("Could not restore backup.");
+      }
+      elements.importFile.value = "";
+    });
+
+    elements.clearButton.addEventListener("click", function () {
+      const date = elements.date.value;
+      const rec = database[date];
+      if (!rec || ((!rec.transactions || !rec.transactions.length) && (!rec.expenses || !rec.expenses.length))) {
+        return showToast("No records to clear.");
+      }
+      showConfirm({
+        title: "Clear this day's records?",
+        message: "All records and expenses for this date will be permanently deleted.",
+        confirmText: "Clear All", cancelText: "Cancel", danger: true,
+        onConfirm: function () {
+          delete database[date];
+          saveDatabase();
+          renderAll();
+          showToast("Day cleared.");
+        }
+      });
+    });
+
+    elements.date.value = getLocalDate();
+    renderAll();
+  </script>
+</body>
+</html>
